@@ -22,7 +22,14 @@ library SwapMath {
         uint160 sqrtRatioCurrentX96,
         uint160 sqrtRatioTargetX96,
         uint128 liquidity,
+        // amountRemaining代表用户还没换完、要继续 swap 的 token 数量
+        // 如果指定输入代币的最大数量(exact in)，则amountRemaining为正数
+        // 如果指定输出代币的最小数量(exact out)，则amountRemaining为负数
         int256 amountRemaining,
+        // 1 bip = 0.01%
+        // 1/100 of a bip = 0.0001% = 1e-6
+        // feePips / 1e6 = 实际手续费率 ：
+        //       fee = 500 → 500 * 1e-6 = 0.0005 = 0.05%
         uint24 feePips
     )
         internal
@@ -34,13 +41,19 @@ library SwapMath {
             uint256 feeAmount
         )
     {
-        bool zeroForOne = sqrtRatioCurrentX96 >= sqrtRatioTargetX96;
+        // zeroForOne 如果是true则输入代币是token0，输出代币是token1，否则相反  
+        //  sqrtRatioCurrentX96 >= sqrtRatioTargetX96 意味着价格走低(token0变多)
+        bool zeroForOne = sqrtRatioCurrentX96 >= sqrtRatioTargetX96;  
         bool exactIn = amountRemaining >= 0;
 
         if (exactIn) {
+            //  amountRemainingLessFee = amountRemaining - amountRemaining*feePips/1e6
             uint256 amountRemainingLessFee = FullMath.mulDiv(uint256(amountRemaining), 1e6 - feePips, 1e6);
+            // 如果是zeroForOne输入是token0，输出是token1，否则输入是token1，输出是token0
+            // amountIn表示从当前价格到sqrtRatioTargetX96之间的兑换，需要输入amountIn数量的token
+            //        如果amountRemainingLessFee大于等于amountIn，表示完成amountIn数量的兑换，还有剩余，可能还需要再进行下一轮swap
             amountIn = zeroForOne
-                ? SqrtPriceMath.getAmount0Delta(sqrtRatioTargetX96, sqrtRatioCurrentX96, liquidity, true)
+                ? SqrtPriceMath.getAmount0Delta(sqrtRatioTargetX96, sqrtRatioCurrentX96, liquidity, true)  // true表示向上取整
                 : SqrtPriceMath.getAmount1Delta(sqrtRatioCurrentX96, sqrtRatioTargetX96, liquidity, true);
             if (amountRemainingLessFee >= amountIn) sqrtRatioNextX96 = sqrtRatioTargetX96;
             else
@@ -49,8 +62,10 @@ library SwapMath {
                     liquidity,
                     amountRemainingLessFee,
                     zeroForOne
-                );
+                ); 
         } else {
+            // 因为输入token作为fee，所以这里不用计算fee
+
             amountOut = zeroForOne
                 ? SqrtPriceMath.getAmount1Delta(sqrtRatioTargetX96, sqrtRatioCurrentX96, liquidity, false)
                 : SqrtPriceMath.getAmount0Delta(sqrtRatioCurrentX96, sqrtRatioTargetX96, liquidity, false);
@@ -64,6 +79,7 @@ library SwapMath {
                 );
         }
 
+        // true：表明两个tick之间的流动性被掏空
         bool max = sqrtRatioTargetX96 == sqrtRatioNextX96;
 
         // get the input/output amounts

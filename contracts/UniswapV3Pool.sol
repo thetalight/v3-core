@@ -86,8 +86,11 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     /// @inheritdoc IUniswapV3PoolState
     ProtocolFees public override protocolFees;
 
+    /// 当前可用的流动性，如当前价格为P 
+    /// 若添加流动性的价格区间为pa < p < pb，则此liquidity会增加
+    //  若P不在添加流动性的价格区间范围内，则不会影响此liquidity
     /// @inheritdoc IUniswapV3PoolState
-    uint128 public override liquidity;
+    uint128 public override liquidity; 
 
     /// @inheritdoc IUniswapV3PoolState
     mapping(int24 => Tick.Info) public override ticks;
@@ -119,6 +122,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         (factory, token0, token1, fee, _tickSpacing) = IUniswapV3PoolDeployer(msg.sender).parameters();
         tickSpacing = _tickSpacing;
 
+        // 每个tick允许最大流动性
         maxLiquidityPerTick = Tick.tickSpacingToMaxLiquidityPerTick(_tickSpacing);
     }
 
@@ -443,6 +447,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
         // clear any tick data that is no longer needed
         if (liquidityDelta < 0) {
+        //  liquidityDelta < 0 表示移除流动性 
+        //  除流动性同时flipped则需要clear
             if (flippedLower) {
                 ticks.clear(tickLower);
             }
@@ -451,6 +457,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             }
         }
     }
+
+    // mint用来添加流动性，不能移除流动性
 
     /// @inheritdoc IUniswapV3PoolActions
     /// @dev noDelegateCall is applied indirectly via _modifyPosition
@@ -462,6 +470,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         bytes calldata data
     ) external override lock returns (uint256 amount0, uint256 amount1) {
         require(amount > 0);
+
         (, int256 amount0Int, int256 amount1Int) =
             _modifyPosition(
                 ModifyPositionParams({
@@ -485,6 +494,10 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
         emit Mint(msg.sender, recipient, tickLower, tickUpper, amount, amount0, amount1);
     }
+
+     /// 移除流动性包括两部分：
+    ///  - 首先通过burn 修改position
+    ///  - 然后通过collect 转移代币
 
     /// @inheritdoc IUniswapV3PoolActions
     function collect(
@@ -525,7 +538,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
                     owner: msg.sender,
                     tickLower: tickLower,
                     tickUpper: tickUpper,
-                    liquidityDelta: -int256(amount).toInt128()
+                    liquidityDelta: -int256(amount).toInt128()  // 负
                 })
             );
 
@@ -562,6 +575,9 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         // the amount remaining to be swapped in/out of the input/output asset
         int256 amountSpecifiedRemaining;
         // the amount already swapped out/in of the output/input asset
+        // 已经交换的金额
+        // 对于exact in，计算的金额是输出金额
+        // 对于exact out，计算的金额是必须输入的金额
         int256 amountCalculated;
         // current sqrt(price)
         uint160 sqrtPriceX96;
@@ -595,8 +611,12 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     /// @inheritdoc IUniswapV3PoolActions
     function swap(
         address recipient,
+        // zeroForOne 如果是true则输入代币是token0，输出代币是token1，否则相反 
         bool zeroForOne,
+        // amountSpecified > 0, 表示exact input，用户输入的token数量，合约计算输出的token数量
+        // amountSpecified < 0, 表示exact output，用户指定输出的token数量，合约计算输入的token数量
         int256 amountSpecified,
+        // 价格限制
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) external override noDelegateCall returns (int256 amount0, int256 amount1) {
@@ -605,6 +625,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         Slot0 memory slot0Start = slot0;
 
         require(slot0Start.unlocked, 'LOK');
+        // 如果是zeroForOne，则价格下降，否则价格上升
         require(
             zeroForOne
                 ? sqrtPriceLimitX96 < slot0Start.sqrtPriceX96 && sqrtPriceLimitX96 > TickMath.MIN_SQRT_RATIO
@@ -638,6 +659,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             });
 
         // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit
+        // 意味着amountSpecifiedRemaining=0 或者 sqrtPriceX96 == sqrtPriceLimitX96 退出循环
         while (state.amountSpecifiedRemaining != 0 && state.sqrtPriceX96 != sqrtPriceLimitX96) {
             StepComputations memory step;
 
@@ -764,6 +786,15 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             if (state.protocolFee > 0) protocolFees.token1 += state.protocolFee;
         }
 
+        //   zeroForOne | exactInput  |
+        //     true     |     true    |    amount0 = specified - remaining (>0)
+        //              |             |    amount1 = calculate             (<0)
+        //     true     |     false   |    amount0 = calculate             (<0)
+        //              |             |    amount1 = specified - remaining (>0)
+        //     false    |     true    |    amount0 = calculate             (>0)
+        //              |             |    amount1 = specified - remaining (<0)
+        //     false    |     false   |    amount0 = specified - remaining (<0)
+        //              |             |    amount1 = calculate             (>0)
         (amount0, amount1) = zeroForOne == exactInput
             ? (amountSpecified - state.amountSpecifiedRemaining, state.amountCalculated)
             : (state.amountCalculated, amountSpecified - state.amountSpecifiedRemaining);

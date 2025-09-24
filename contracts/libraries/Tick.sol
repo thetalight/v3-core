@@ -15,7 +15,7 @@ library Tick {
 
     // info stored for each initialized individual tick
     struct Info {
-        // the total position liquidity that references this tick
+        // the total position liquidity that references this tick // Gross总的
         uint128 liquidityGross;
         // amount of net liquidity added (subtracted) when tick is crossed from left to right (right to left),
         int128 liquidityNet;
@@ -45,6 +45,8 @@ library Tick {
         int24 minTick = (TickMath.MIN_TICK / tickSpacing) * tickSpacing;
         int24 maxTick = (TickMath.MAX_TICK / tickSpacing) * tickSpacing;
         uint24 numTicks = uint24((maxTick - minTick) / tickSpacing) + 1;
+        //  Liquidity是用u128表示的，所以最大值是2^128-1
+        //  一共有numTicks个tick，每个tick的最大liquidity是type(uint128).max / numTicks
         return type(uint128).max / numTicks;
     }
 
@@ -126,7 +128,10 @@ library Tick {
         uint128 liquidityGrossAfter = LiquidityMath.addDelta(liquidityGrossBefore, liquidityDelta);
 
         require(liquidityGrossAfter <= maxLiquidity, 'LO');
-
+        
+        // 两种情况：
+        // 1. 之前流动性为0，现在不为0，则需要翻转tick
+        // 2. 之前流动性不为0，现在为0，则需要翻转tick
         flipped = (liquidityGrossAfter == 0) != (liquidityGrossBefore == 0);
 
         if (liquidityGrossBefore == 0) {
@@ -143,6 +148,11 @@ library Tick {
 
         info.liquidityGross = liquidityGrossAfter;
 
+        // lower    upper
+        //  ｜        ｜
+        //  +         -
+        //  ------------> +
+        //  <------------ -  
         // when the lower (upper) tick is crossed left to right (right to left), liquidity must be added (removed)
         info.liquidityNet = upper
             ? int256(info.liquidityNet).sub(liquidityDelta).toInt128()

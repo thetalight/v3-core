@@ -11,6 +11,16 @@ $$
 
 <image src = "./images/1.png" width = "300px" height = "300px">
 
+####  计算tick
+  $$
+  \begin{aligned}
+   &  P = 1.0001^{tick} = (\frac{sqrtPriceX96}{Q96})^2 \\
+   &  log(1.0001^{tick})   = log(\frac{sqrtPriceX96}{Q96})^2 \\
+   &  tick \cdot log(1.0001) = 2 log(\frac{sqrtPriceX96}{Q96})\\
+   & tick = \frac{2 log(\frac{sqrtPriceX96}{Q96})}{log(1.0001)} \\
+   \end{aligned}
+  $$
+
 ####  计算$x_v,y_v$
 1. 当$x_R=0$ 
    
@@ -146,4 +156,3 @@ $f_{i,t}$ = Fee of token Y collected in $L_{i,t}$
     f_o(i) = f_g-f_o(i)
     $$
 
-    

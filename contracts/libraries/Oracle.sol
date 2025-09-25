@@ -251,6 +251,7 @@ library Oracle {
         uint128 liquidity,
         uint16 cardinality
     ) internal view returns (int56 tickCumulative, uint160 secondsPerLiquidityCumulativeX128) {
+        // secondsAgo == 0 
         if (secondsAgo == 0) {
             Observation memory last = self[index];
             if (last.blockTimestamp != time) last = transform(last, time, tick, liquidity);

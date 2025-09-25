@@ -283,8 +283,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             sqrtPriceX96: sqrtPriceX96,
             tick: tick,
             observationIndex: 0,
-            observationCardinality: cardinality,
-            observationCardinalityNext: cardinalityNext,
+            observationCardinality: cardinality,  // 1
+            observationCardinalityNext: cardinalityNext, // 1
             feeProtocol: 0,
             unlocked: true
         });

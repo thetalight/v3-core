@@ -46,24 +46,40 @@ library TickBitmap {
         bool lte
     ) internal view returns (int24 next, bool initialized) {
         int24 compressed = tick / tickSpacing;
+        // 对于负数而言，使用除法会出现向上取整的情况
+        // 所以此处使用了 if (tick < 0 && tick % tickSpacing != 0) compressed--;  来避免除法的向上取整。
         if (tick < 0 && tick % tickSpacing != 0) compressed--; // round towards negative infinity
 
         if (lte) {
             (int16 wordPos, uint8 bitPos) = position(compressed);
             // all the 1s at or to the right of the current bitPos
+            // 假设 bitPos = 7 
+            // 则 (1 << bitPos)                   = 0000...00010000000
+            // (1 << bitPos) - 1                  = 0000...00001111111
+            // (1 << bitPos) - 1 + (1 << bitPos)  = 0000...00011111111
             uint256 mask = (1 << bitPos) - 1 + (1 << bitPos);
             uint256 masked = self[wordPos] & mask;
+
+            /**
+            masked 可能会包含自身
+              - 假设masked 包含自身 ，则next = compressed ，此时在核心的循环最后，使用了 step.tickNext - 1直接将 step.tickNext 向下移动
+    
+             */
 
             // if there are no initialized ticks to the right of or at the current tick, return rightmost in the word
             initialized = masked != 0;
             // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick
             next = initialized
                 ? (compressed - int24(bitPos - BitMath.mostSignificantBit(masked))) * tickSpacing
-                : (compressed - int24(bitPos)) * tickSpacing;
+                : (compressed - int24(bitPos)) * tickSpacing;  // 直接返回当前位图最左侧的索引
         } else {
             // start from the word of the next tick, since the current tick state doesn't matter
-            (int16 wordPos, uint8 bitPos) = position(compressed + 1);
+            (int16 wordPos, uint8 bitPos) = position(compressed + 1); // 从+1开始，排除当前tick
             // all the 1s at or to the left of the bitPos
+            // bitPos =7
+            // 则 (1 << bitPos)                   = 0000...00010000000
+            // 1 << bitPos) - 1                   = 0000...00001111111
+            // ~((1 << bitPos) - 1)               = 1111...11110000000
             uint256 mask = ~((1 << bitPos) - 1);
             uint256 masked = self[wordPos] & mask;
 
@@ -72,7 +88,8 @@ library TickBitmap {
             // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick
             next = initialized
                 ? (compressed + 1 + int24(BitMath.leastSignificantBit(masked) - bitPos)) * tickSpacing
-                : (compressed + 1 + int24(type(uint8).max - bitPos)) * tickSpacing;
+                : (compressed + 1 + int24(type(uint8).max - bitPos)) * tickSpacing;  // 将 next 置为当前 word 的最大值 
+                // 即假如第一次没有搜索到合适的 tick ，即next设置成最大值，下一次通过position(compressed + 1)，直接将当前 tick 推入到下一个 word 区间
         }
     }
 }

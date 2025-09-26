@@ -63,7 +63,7 @@ library Position {
                 FullMath.mulDiv(
                     feeGrowthInside0X128 - _self.feeGrowthInside0LastX128,
                     _self.liquidity,
-                    FixedPoint128.Q128
+                    FixedPoint128.Q128  //Q28= 2^128
                 )
             );
         uint128 tokensOwed1 =
@@ -79,6 +79,7 @@ library Position {
         if (liquidityDelta != 0) self.liquidity = liquidityNext;
         self.feeGrowthInside0LastX128 = feeGrowthInside0X128;
         self.feeGrowthInside1LastX128 = feeGrowthInside1X128;
+        
         if (tokensOwed0 > 0 || tokensOwed1 > 0) {
             // overflow is acceptable, have to withdraw before you hit type(uint128).max fees
             self.tokensOwed0 += tokensOwed0;

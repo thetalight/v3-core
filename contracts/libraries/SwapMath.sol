@@ -43,6 +43,7 @@ library SwapMath {
     {
         // zeroForOne 如果是true则输入代币是token0，输出代币是token1，否则相反  
         //  sqrtRatioCurrentX96 >= sqrtRatioTargetX96 意味着价格走低(token0变多)
+        // 从获取nexttick我们知道sqrtRatioCurrentX96可以等于sqrtRatioTargetX96的
         bool zeroForOne = sqrtRatioCurrentX96 >= sqrtRatioTargetX96;  
         bool exactIn = amountRemaining >= 0;
 

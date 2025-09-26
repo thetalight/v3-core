@@ -37,7 +37,7 @@ library Oracle {
         return
             Observation({
                 blockTimestamp: blockTimestamp,
-                tickCumulative: last.tickCumulative + int56(tick) * delta,
+                tickCumulative: last.tickCumulative + int56(tick) * delta, // * delta 是因为 tick 不是“一次事件”，而是“在这段时间持续的数值”
                 secondsPerLiquidityCumulativeX128: last.secondsPerLiquidityCumulativeX128 +
                     ((uint160(delta) << 128) / (liquidity > 0 ? liquidity : 1)),
                 initialized: true
@@ -81,11 +81,14 @@ library Oracle {
         uint32 blockTimestamp,
         int24 tick,
         uint128 liquidity,
+        // 当前的 Oracle 数量
         uint16 cardinality,
+        // 可用的 Oracle 数量
         uint16 cardinalityNext
     ) internal returns (uint16 indexUpdated, uint16 cardinalityUpdated) {
         Observation memory last = self[index];
 
+        // 同一个区块内，只会在第一笔交易中写入 Oracle 数据
         // early return if we've already written an observation this block
         if (last.blockTimestamp == blockTimestamp) return (index, cardinality);
 

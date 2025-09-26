@@ -448,7 +448,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         // clear any tick data that is no longer needed
         if (liquidityDelta < 0) {
         //  liquidityDelta < 0 表示移除流动性 
-        //  除流动性同时flipped则需要clear
+        //  移除流动性时，如果是flipped则需要clear
             if (flippedLower) {
                 ticks.clear(tickLower);
             }
@@ -611,7 +611,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     /// @inheritdoc IUniswapV3PoolActions
     function swap(
         address recipient,
-        // zeroForOne 如果是true则输入代币是token0，输出代币是token1，否则相反 
+        // 如果是true则输入代币是token0，输出代币是token1，否则相反 
         bool zeroForOne,
         // amountSpecified > 0, 表示exact input，用户输入的token数量，合约计算输出的token数量
         // amountSpecified < 0, 表示exact output，用户指定输出的token数量，合约计算输入的token数量
@@ -639,11 +639,12 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             SwapCache({
                 liquidityStart: liquidity,
                 blockTimestamp: _blockTimestamp(),
+                // 低4位 token0的fee，高4位 token1的fee
                 feeProtocol: zeroForOne ? (slot0Start.feeProtocol % 16) : (slot0Start.feeProtocol >> 4),
                 secondsPerLiquidityCumulativeX128: 0,
                 tickCumulative: 0,
                 computedLatestObservation: false
-            });
+            });x
 
         bool exactInput = amountSpecified > 0;
 
@@ -654,8 +655,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
                 sqrtPriceX96: slot0Start.sqrtPriceX96,
                 tick: slot0Start.tick,
                 feeGrowthGlobalX128: zeroForOne ? feeGrowthGlobal0X128 : feeGrowthGlobal1X128,
-                protocolFee: 0,
-                liquidity: cache.liquidityStart
+                protocolFee: 0, // 累加的protocolFee
+                liquidity: cache.liquidityStart // 从cache读取更便宜
             });
 
         // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit
